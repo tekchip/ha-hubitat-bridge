@@ -14,8 +14,9 @@
       }
     },
     "error": {
-      "cannot_connect": "Unable to reach the hub. Check the Hub URL.",
-      "invalid_auth": "Invalid credentials. Check token, username, and password.",
+      "cannot_connect": "Cannot reach the hub at this URL.",
+      "invalid_token": "Access token rejected by the hub. Check the Maker API token.",
+      "invalid_auth": "Login failed. Check your username and password.",
       "unknown": "Unexpected error. See logs for details."
     },
     "abort": {

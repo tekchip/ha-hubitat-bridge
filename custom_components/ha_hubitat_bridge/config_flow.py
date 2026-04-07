@@ -54,12 +54,14 @@ class HubitatBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             try:
                 await maker.get_devices()
+            except aiohttp.ClientResponseError:
+                errors[CONF_TOKEN] = "invalid_token"
             except Exception:
-                errors["base"] = "cannot_connect"
+                errors[CONF_HUB_URL] = "cannot_connect"
             else:
                 ok = await web.async_login()
                 if not ok:
-                    errors["base"] = "invalid_auth"
+                    errors[CONF_PASSWORD] = "invalid_auth"
 
             if not errors:
                 await self.async_set_unique_id(DOMAIN)

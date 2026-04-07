@@ -58,7 +58,21 @@ async def test_cannot_connect_shows_error(hass: HomeAssistant):
             DOMAIN, context={"source": config_entries.SOURCE_USER}, data=VALID_INPUT
         )
     assert result["type"] == FlowResultType.FORM
-    assert result["errors"]["base"] == "cannot_connect"
+    assert result["errors"]["hub_url"] == "cannot_connect"
+
+
+async def test_invalid_token_shows_error(hass: HomeAssistant):
+    import aiohttp
+    with patch(
+        "custom_components.ha_hubitat_bridge.config_flow.HubitatMakerClient.get_devices",
+        new_callable=AsyncMock,
+        side_effect=aiohttp.ClientResponseError(None, None, status=401),
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": config_entries.SOURCE_USER}, data=VALID_INPUT
+        )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"]["token"] == "invalid_token"
 
 
 async def test_invalid_auth_shows_error(hass: HomeAssistant):
@@ -78,4 +92,4 @@ async def test_invalid_auth_shows_error(hass: HomeAssistant):
             DOMAIN, context={"source": config_entries.SOURCE_USER}, data=VALID_INPUT
         )
     assert result["type"] == FlowResultType.FORM
-    assert result["errors"]["base"] == "invalid_auth"
+    assert result["errors"]["password"] == "invalid_auth"
