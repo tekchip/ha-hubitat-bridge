@@ -100,7 +100,8 @@ def _command_for(entity_id: str, state: State) -> tuple[str, str | None] | None:
             "illuminance": "setIlluminance",
         }
         cmd = cmd_map.get(device_class, "setValue")
-        return (cmd, str(val))
+        # Round to 2 decimal places — avoids absurdly long URL paths for floats
+        return (cmd, str(round(val, 2)))
 
     if domain == "climate":
         hvac = s
@@ -156,6 +157,9 @@ class HAToHubitat:
 
         if not self._entity_map.has(entity_id):
             await self._create_virtual_device(entity_id, state)
+            # Skip sync on first creation — the Maker API needs a moment to register
+            # the new virtual device. The next state change will trigger the sync.
+            return
 
         await self._sync_state(entity_id, state)
 

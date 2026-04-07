@@ -93,7 +93,10 @@ async def test_qualifies_rejects_non_mirror_domain(hass, maker_client, web_clien
 
 
 async def test_state_change_creates_virtual_device_and_syncs(hass, maker_client, web_client, entity_map, mock_entry):
-    """On first state_changed for a qualifying entity, creates virtual device and syncs command."""
+    """
+    First state_changed creates the virtual device but skips sync (Maker API needs time
+    to register the new device). Second state_changed syncs without creating again.
+    """
     ha_to_hub = HAToHubitat(hass, mock_entry, maker_client, web_client, entity_map)
 
     er_entry = MagicMock()
@@ -108,11 +111,16 @@ async def test_state_change_creates_virtual_device_and_syncs(hass, maker_client,
 
     with patch("custom_components.ha_hubitat_bridge.ha_to_hubitat.er.async_get") as mock_er:
         mock_er.return_value.async_get = MagicMock(return_value=er_entry)
+        # First event: creates device, skips sync
         await ha_to_hub._handle_state_changed("switch.my_switch", state)
+        web_client.async_create_virtual_device.assert_called_once_with("My Switch", "Virtual Switch")
+        maker_client.send_command.assert_not_called()
+        assert entity_map.get("switch.my_switch") == "99"
 
-    web_client.async_create_virtual_device.assert_called_once_with("My Switch", "Virtual Switch")
-    maker_client.send_command.assert_called_once_with("99", "on")
-    assert entity_map.get("switch.my_switch") == "99"
+        # Second event: syncs without creating again
+        await ha_to_hub._handle_state_changed("switch.my_switch", state)
+        web_client.async_create_virtual_device.assert_called_once()  # still just once
+        maker_client.send_command.assert_called_once_with("99", "on")
 
 
 async def test_state_change_syncs_existing_device(hass, maker_client, web_client, entity_map, mock_entry):
