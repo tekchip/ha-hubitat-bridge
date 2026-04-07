@@ -24,6 +24,7 @@ class EntityMap:
         await self._store.async_save(self._data)
 
     def put(self, entity_id: str, hubitat_device_id: str) -> None:
+        """Update in-memory mapping. Caller must call async_save() to persist."""
         self._data[entity_id] = hubitat_device_id
 
     def get(self, entity_id: str) -> str | None:

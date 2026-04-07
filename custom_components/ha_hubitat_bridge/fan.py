@@ -76,5 +76,5 @@ class HubitatFan(HubitatEntity, FanEntity):
     async def async_set_percentage(self, percentage: int) -> None:
         speed = min(_PCT_TO_SPEED, key=lambda p: abs(p - percentage))
         await self._coordinator.maker_client.send_command(self._device_id, "setSpeed", _PCT_TO_SPEED[speed])
-        self._attr_percentage = percentage
+        self._attr_percentage = _SPEED_TO_PCT[speed]
         self.async_write_ha_state()

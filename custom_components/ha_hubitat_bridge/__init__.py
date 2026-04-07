@@ -50,8 +50,5 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
-        data = hass.data[DOMAIN].pop(entry.entry_id, {})
-        ha_to_hubitat: HAToHubitat | None = data.get("ha_to_hubitat")
-        if ha_to_hubitat:
-            await ha_to_hubitat.async_teardown()
+        hass.data[DOMAIN].pop(entry.entry_id, {})
     return unload_ok
