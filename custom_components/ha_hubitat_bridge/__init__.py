@@ -28,8 +28,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry.data[CONF_HUB_URL],
         entry.data[CONF_USERNAME],
         entry.data[CONF_PASSWORD],
-        session,
     )
+    entry.async_on_unload(web_client.async_close)
     entity_map = EntityMap(hass)
     await entity_map.async_load()
 

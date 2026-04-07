@@ -2,9 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
 import urllib.parse
-import uuid
 from typing import Any
 
 import aiohttp
@@ -76,6 +74,10 @@ class HubitatWebClient:
     """
     Authenticated client for Hubitat's web UI.
     Used exclusively for creating virtual devices, which the Maker API cannot do.
+
+    Manages its own aiohttp session with CookieJar(unsafe=True) because Hubitat
+    runs on an IP address and aiohttp's default jar silently drops cookies from IPs.
+    Call async_close() when done (or register it with entry.async_on_unload).
     """
 
     def __init__(
@@ -83,20 +85,33 @@ class HubitatWebClient:
         hub_url: str,
         username: str,
         password: str,
-        session: aiohttp.ClientSession,
     ) -> None:
         self._hub_url = hub_url.rstrip("/")
         self._username = username
         self._password = password
-        self._session = session
+        self._session: aiohttp.ClientSession | None = None
         self._authenticated = False
+        self._driver_map: dict[str, int] = {}  # driver name → Hubitat numeric ID
+
+    def _get_session(self) -> aiohttp.ClientSession:
+        if self._session is None:
+            self._session = aiohttp.ClientSession(
+                cookie_jar=aiohttp.CookieJar(unsafe=True)
+            )
+        return self._session
+
+    async def async_close(self) -> None:
+        """Close the underlying HTTP session. Must be called on integration unload."""
+        if self._session is not None:
+            await self._session.close()
+            self._session = None
 
     async def async_login(self) -> bool:
         """POST credentials to /login. Returns True if Hubitat redirects away from /login."""
         url = f"{self._hub_url}/login"
         data = {"username": self._username, "password": self._password, "submit": "Login"}
         try:
-            async with self._session.post(
+            async with self._get_session().post(
                 url, data=data, allow_redirects=False, timeout=aiohttp.ClientTimeout(total=10)
             ) as resp:
                 # Successful login: Hubitat issues a 302 redirect away from /login
@@ -111,11 +126,30 @@ class HubitatWebClient:
             self._authenticated = False
             return False
 
+    async def _load_driver_map(self) -> None:
+        """Fetch the full driver list from Hubitat and cache name→id mappings."""
+        try:
+            async with self._get_session().get(
+                f"{self._hub_url}/driver/list/data",
+                timeout=aiohttp.ClientTimeout(total=15),
+            ) as resp:
+                drivers = await resp.json(content_type=None)
+                self._driver_map = {
+                    d["name"]: d["id"]
+                    for d in drivers
+                    if isinstance(d, dict) and "name" in d and "id" in d
+                }
+                _LOGGER.debug("Loaded %d Hubitat drivers", len(self._driver_map))
+        except Exception as exc:
+            _LOGGER.error("Failed to load Hubitat driver list: %s", exc)
+
     async def async_create_virtual_device(self, name: str, driver: str) -> str | None:
         """
-        Create a virtual device on Hubitat.
+        Create a virtual device on Hubitat and set its label.
         Returns the new Hubitat device ID string, or None on failure.
-        POST /device/update → Hubitat redirects to /device/edit/{id}.
+
+        Uses GET /device/createVirtual?deviceTypeId=<id> (numeric driver ID fetched
+        from /driver/list/data), then GET /device/updateLabel to name the device.
         """
         if not self._authenticated:
             _LOGGER.debug("Not authenticated; logging in before creating virtual device")
@@ -123,52 +157,61 @@ class HubitatWebClient:
                 _LOGGER.error("Login failed — cannot create virtual device '%s'", name)
                 return None
 
-        url = f"{self._hub_url}/device/update"
-        network_id = f"hab-{uuid.uuid4().hex[:8]}"
-        data = {
-            "action": "new",
-            "deviceType": driver,
-            "deviceName": name,
-            "deviceLabel": name,
-            "hub": "1",
-            "deviceNetworkId": network_id,
-        }
-        _LOGGER.debug("POST %s with driver=%s name=%s", url, driver, name)
+        if not self._driver_map:
+            await self._load_driver_map()
+
+        driver_id = self._driver_map.get(driver)
+        if driver_id is None:
+            _LOGGER.error(
+                "Unknown virtual driver '%s'. Available drivers: %s",
+                driver, sorted(self._driver_map.keys()),
+            )
+            return None
+
+        session = self._get_session()
+
+        # Create the virtual device
         try:
-            async with self._session.post(
-                url, data=data, allow_redirects=False, timeout=aiohttp.ClientTimeout(total=15)
+            async with session.get(
+                f"{self._hub_url}/device/createVirtual",
+                params={"deviceTypeId": driver_id},
+                allow_redirects=False,
+                timeout=aiohttp.ClientTimeout(total=15),
             ) as resp:
-                location = resp.headers.get("Location", "")
-                _LOGGER.debug(
-                    "Create virtual device response: status=%s Location=%r", resp.status, location
-                )
-                # Hubitat redirects to /device/edit/{id} on success
                 if resp.status in (301, 302, 303, 307, 308):
-                    if location.rstrip("/").endswith("/login"):
-                        _LOGGER.warning(
-                            "Session expired creating virtual device '%s'; Location=%s", name, location
+                    location = resp.headers.get("Location", "")
+                    if "login" in location:
+                        _LOGGER.warning("Session expired creating virtual device '%s'", name)
+                        self._authenticated = False
+                    else:
+                        _LOGGER.error(
+                            "createVirtual for '%s': unexpected redirect to %r", name, location
                         )
-                        self._authenticated = False  # session expired
-                        return None
-                    if "/device/edit/" in location:
-                        return location.split("/device/edit/")[-1].split("?")[0].strip()
-                    # Fallback: scan response body for redirect hint
-                    body = await resp.text()
-                    _LOGGER.debug("Redirect body snippet: %.500s", body)
-                    match = re.search(r"/device/edit/(\d+)", body)
-                    if match:
-                        return match.group(1)
-                    _LOGGER.error(
-                        "Create virtual device '%s': redirect Location=%r has no /device/edit/ path", name, location
-                    )
                     return None
-                # Non-redirect: log body snippet to help diagnose
-                body = await resp.text()
-                _LOGGER.error(
-                    "Create virtual device '%s': unexpected status=%s body=%.500s",
-                    name, resp.status, body,
-                )
-                return None
+                result = await resp.json(content_type=None)
         except Exception as exc:
             _LOGGER.error("Failed to create virtual device '%s' (%s): %s", name, driver, exc)
             return None
+
+        if not result.get("success"):
+            _LOGGER.error("createVirtual returned failure for '%s': %s", name, result)
+            return None
+
+        device_id = result.get("deviceId")
+        if device_id is None:
+            _LOGGER.error("createVirtual returned no deviceId for '%s': %s", name, result)
+            return None
+
+        # Set the device label to the friendly name
+        try:
+            async with session.get(
+                f"{self._hub_url}/device/updateLabel",
+                params={"deviceId": device_id, "label": name},
+                allow_redirects=False,
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as resp:
+                await resp.read()
+        except Exception as exc:
+            _LOGGER.warning("Created device %s but failed to set label '%s': %s", device_id, name, exc)
+
+        return str(device_id)

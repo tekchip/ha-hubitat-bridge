@@ -45,7 +45,7 @@ BINARY_SENSOR_CLASS_TO_DRIVER: dict[str | None, str] = {
     "window": "Virtual Contact Sensor",
     "contact": "Virtual Contact Sensor",
     "garage_door": "Virtual Contact Sensor",
-    "moisture": "Virtual Water Sensor",
+    "moisture": "Virtual Moisture Sensor",
     "smoke": "Virtual Smoke Detector",
     None: "Virtual Contact Sensor",
 }
@@ -61,7 +61,7 @@ HA_DOMAIN_TO_DRIVER: dict[str, str] = {
     "switch": "Virtual Switch",
     "input_boolean": "Virtual Switch",
     "lock": "Virtual Lock",
-    "cover": "Virtual Garage Door Control",
+    "cover": "Virtual Garage Door Controller",
     "climate": "Virtual Thermostat",
     "fan": "Virtual Fan Controller",
     "media_player": "Virtual Switch",
