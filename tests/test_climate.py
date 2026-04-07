@@ -59,3 +59,14 @@ async def test_set_temperature(hass, coordinator):
     with patch.object(cl, "async_write_ha_state"):
         await cl.async_set_temperature(temperature=25.0)
     coordinator.maker_client.send_command.assert_any_call("50", "setCoolingSetpoint", "25.0")
+
+
+async def test_set_temperature_in_heat_mode(hass, coordinator):
+    from custom_components.ha_hubitat_bridge.climate import HubitatClimate
+    from homeassistant.components.climate import HVACMode
+    cl = HubitatClimate(CLIMATE_DEVICE, coordinator)
+    cl.hass = hass
+    cl._attr_hvac_mode = HVACMode.HEAT
+    with patch.object(cl, "async_write_ha_state"):
+        await cl.async_set_temperature(temperature=21.0)
+    coordinator.maker_client.send_command.assert_any_call("50", "setHeatingSetpoint", "21.0")
