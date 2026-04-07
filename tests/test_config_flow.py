@@ -36,7 +36,7 @@ async def test_valid_input_creates_entry(hass: HomeAssistant):
             return_value=True,
         ),
         patch(
-            "custom_components.ha_hubitat_bridge.__init__.async_setup_entry",
+            "custom_components.ha_hubitat_bridge.async_setup_entry",
             return_value=True,
         ),
     ):
