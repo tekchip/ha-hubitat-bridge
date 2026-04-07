@@ -11,6 +11,17 @@
           "username": "Hub Username",
           "password": "Hub Password"
         }
+      },
+      "reconfigure": {
+        "title": "Reconfigure Hubitat Bridge",
+        "description": "Update your Hubitat Elevation hub details.",
+        "data": {
+          "hub_url": "Hub URL",
+          "app_id": "Maker API App ID",
+          "token": "Maker API Access Token",
+          "username": "Hub Username",
+          "password": "Hub Password"
+        }
       }
     },
     "error": {
@@ -20,7 +31,22 @@
       "unknown": "Unexpected error. See logs for details."
     },
     "abort": {
-      "already_configured": "Hubitat Bridge is already configured."
+      "already_configured": "Hubitat Bridge is already configured.",
+      "reconfigure_successful": "Hubitat Bridge settings updated."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Hubitat Bridge Options",
+        "description": "Optionally provide a URL to a custom icon image (PNG or JPG, 256×256 recommended). Leave blank to use the default icon. **Restart Home Assistant after saving to apply the new icon.**",
+        "data": {
+          "icon_url": "Custom Icon URL"
+        }
+      }
+    },
+    "error": {
+      "icon_download_failed": "Could not download the image from that URL. Check the URL and that it points to a valid image file."
     }
   }
 }
