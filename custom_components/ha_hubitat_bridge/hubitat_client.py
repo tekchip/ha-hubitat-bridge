@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import urllib.parse
+import uuid
 from typing import Any
 
 import aiohttp
@@ -68,3 +70,82 @@ class HubitatMakerClient:
         async with self._session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
             resp.raise_for_status()
             return await resp.json(content_type=None)
+
+
+class HubitatWebClient:
+    """
+    Authenticated client for Hubitat's web UI.
+    Used exclusively for creating virtual devices, which the Maker API cannot do.
+    """
+
+    def __init__(
+        self,
+        hub_url: str,
+        username: str,
+        password: str,
+        session: aiohttp.ClientSession,
+    ) -> None:
+        self._hub_url = hub_url.rstrip("/")
+        self._username = username
+        self._password = password
+        self._session = session
+        self._authenticated = False
+
+    async def async_login(self) -> bool:
+        """POST credentials to /login. Returns True if Hubitat redirects away from /login."""
+        url = f"{self._hub_url}/login"
+        data = {"loginName": self._username, "loginPassword": self._password}
+        try:
+            async with self._session.post(
+                url, data=data, allow_redirects=False, timeout=aiohttp.ClientTimeout(total=10)
+            ) as resp:
+                # Successful login: Hubitat issues a 302 redirect away from /login
+                if resp.status in (301, 302, 303, 307, 308):
+                    location = resp.headers.get("Location", "")
+                    self._authenticated = not location.rstrip("/").endswith("/login")
+                else:
+                    self._authenticated = False
+                return self._authenticated
+        except Exception as exc:
+            _LOGGER.error("Hubitat web login failed: %s", exc)
+            self._authenticated = False
+            return False
+
+    async def async_create_virtual_device(self, name: str, driver: str) -> str | None:
+        """
+        Create a virtual device on Hubitat.
+        Returns the new Hubitat device ID string, or None on failure.
+        POST /device/update → Hubitat redirects to /device/edit/{id}.
+        """
+        if not self._authenticated:
+            if not await self.async_login():
+                return None
+
+        url = f"{self._hub_url}/device/update"
+        network_id = f"hab-{uuid.uuid4().hex[:8]}"
+        data = {
+            "action": "new",
+            "deviceType": driver,
+            "deviceName": name,
+            "deviceLabel": name,
+            "hub": "1",
+            "deviceNetworkId": network_id,
+        }
+        try:
+            async with self._session.post(
+                url, data=data, allow_redirects=False, timeout=aiohttp.ClientTimeout(total=15)
+            ) as resp:
+                # Hubitat redirects to /device/edit/{id} on success
+                if resp.status in (301, 302, 303, 307, 308):
+                    location = resp.headers.get("Location", "")
+                    if "/device/edit/" in location:
+                        return location.split("/device/edit/")[-1].split("?")[0].strip()
+                    return None
+                resp.raise_for_status()
+                # Fallback: scan response body for redirect hint
+                body = await resp.text()
+                match = re.search(r"/device/edit/(\d+)", body)
+                return match.group(1) if match else None
+        except Exception as exc:
+            _LOGGER.error("Failed to create virtual device '%s' (%s): %s", name, driver, exc)
+            return None

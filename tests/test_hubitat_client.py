@@ -2,7 +2,7 @@ import pytest
 import aiohttp
 from aioresponses import aioresponses
 
-from custom_components.ha_hubitat_bridge.hubitat_client import HubitatMakerClient
+from custom_components.ha_hubitat_bridge.hubitat_client import HubitatMakerClient, HubitatWebClient
 
 BASE = "http://10.10.10.7/apps/api/150"
 TOKEN = "test-token"
@@ -61,3 +61,47 @@ async def test_subscribe_url_encodes_callback(maker_client):
         )
         result = await maker_client.subscribe_url("http://10.10.10.10:8123/api/webhook/abc")
     assert result == {"result": "ok"}
+
+
+@pytest.fixture
+async def web_client():
+    session = aiohttp.ClientSession()
+    yield HubitatWebClient("http://10.10.10.7", "brock", "password123", session)
+    await session.close()
+
+
+async def test_login_success(web_client):
+    with aioresponses() as m:
+        # Hubitat redirects to "/" on successful login
+        m.post("http://10.10.10.7/login", status=302, headers={"Location": "http://10.10.10.7/"})
+        result = await web_client.async_login()
+    assert result is True
+
+
+async def test_login_failure_stays_on_login(web_client):
+    with aioresponses() as m:
+        # Stays on /login page on failure
+        m.post("http://10.10.10.7/login", status=200, headers={})
+        result = await web_client.async_login()
+    assert result is False
+
+
+async def test_create_virtual_device_returns_id(web_client):
+    web_client._authenticated = True
+    with aioresponses() as m:
+        # Hubitat redirects to /device/edit/{id} after creating
+        m.post(
+            "http://10.10.10.7/device/update",
+            status=302,
+            headers={"Location": "http://10.10.10.7/device/edit/42"},
+        )
+        device_id = await web_client.async_create_virtual_device("Test Switch", "Virtual Switch")
+    assert device_id == "42"
+
+
+async def test_create_virtual_device_returns_none_on_error(web_client):
+    web_client._authenticated = True
+    with aioresponses() as m:
+        m.post("http://10.10.10.7/device/update", status=500)
+        device_id = await web_client.async_create_virtual_device("Bad", "Virtual Switch")
+    assert device_id is None
