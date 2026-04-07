@@ -94,7 +94,7 @@ class HubitatWebClient:
     async def async_login(self) -> bool:
         """POST credentials to /login. Returns True if Hubitat redirects away from /login."""
         url = f"{self._hub_url}/login"
-        data = {"loginName": self._username, "loginPassword": self._password}
+        data = {"username": self._username, "password": self._password, "submit": "Login"}
         try:
             async with self._session.post(
                 url, data=data, allow_redirects=False, timeout=aiohttp.ClientTimeout(total=10)
