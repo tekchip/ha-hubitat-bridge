@@ -9,16 +9,10 @@ from custom_components.ha_hubitat_bridge.ha_to_hubitat import HAToHubitat
 
 
 @pytest.fixture
-def maker_client():
-    c = AsyncMock()
-    c.send_command = AsyncMock(return_value={"result": "ok"})
-    return c
-
-
-@pytest.fixture
 def web_client():
     c = AsyncMock()
     c.async_create_virtual_device = AsyncMock(return_value="99")
+    c.async_send_command = AsyncMock(return_value=True)
     return c
 
 
@@ -37,7 +31,7 @@ def mock_entry():
     return e
 
 
-async def test_qualifies_switch(hass, maker_client, web_client, entity_map, mock_entry):
+async def test_qualifies_switch(hass, web_client, entity_map, mock_entry):
     from custom_components.ha_hubitat_bridge.ha_to_hubitat import _qualifies
 
     er_entry = MagicMock()
@@ -48,7 +42,7 @@ async def test_qualifies_switch(hass, maker_client, web_client, entity_map, mock
     assert _qualifies("switch.my_switch", er_entry) is True
 
 
-async def test_qualifies_rejects_hubitat_platform(hass, maker_client, web_client, entity_map, mock_entry):
+async def test_qualifies_rejects_hubitat_platform(hass, web_client, entity_map, mock_entry):
     from custom_components.ha_hubitat_bridge.ha_to_hubitat import _qualifies
 
     er_entry = MagicMock()
@@ -59,7 +53,7 @@ async def test_qualifies_rejects_hubitat_platform(hass, maker_client, web_client
     assert _qualifies("switch.hubitat_switch", er_entry) is False
 
 
-async def test_qualifies_rejects_diagnostic(hass, maker_client, web_client, entity_map, mock_entry):
+async def test_qualifies_rejects_diagnostic(hass, web_client, entity_map, mock_entry):
     from custom_components.ha_hubitat_bridge.ha_to_hubitat import _qualifies
 
     er_entry = MagicMock()
@@ -70,7 +64,7 @@ async def test_qualifies_rejects_diagnostic(hass, maker_client, web_client, enti
     assert _qualifies("sensor.signal_strength", er_entry) is False
 
 
-async def test_qualifies_rejects_ignore_label(hass, maker_client, web_client, entity_map, mock_entry):
+async def test_qualifies_rejects_ignore_label(hass, web_client, entity_map, mock_entry):
     from custom_components.ha_hubitat_bridge.ha_to_hubitat import _qualifies
 
     er_entry = MagicMock()
@@ -81,7 +75,7 @@ async def test_qualifies_rejects_ignore_label(hass, maker_client, web_client, en
     assert _qualifies("switch.ignored", er_entry) is False
 
 
-async def test_qualifies_rejects_non_mirror_domain(hass, maker_client, web_client, entity_map, mock_entry):
+async def test_qualifies_rejects_non_mirror_domain(hass, web_client, entity_map, mock_entry):
     from custom_components.ha_hubitat_bridge.ha_to_hubitat import _qualifies
 
     er_entry = MagicMock()
@@ -92,12 +86,12 @@ async def test_qualifies_rejects_non_mirror_domain(hass, maker_client, web_clien
     assert _qualifies("automation.my_auto", er_entry) is False
 
 
-async def test_state_change_creates_virtual_device_and_syncs(hass, maker_client, web_client, entity_map, mock_entry):
+async def test_state_change_creates_virtual_device_and_syncs(hass, web_client, entity_map, mock_entry):
     """
-    First state_changed creates the virtual device but skips sync (Maker API needs time
-    to register the new device). Second state_changed syncs without creating again.
+    First state_changed creates the virtual device but skips sync (device needs time
+    to be ready). Second state_changed syncs via web client without creating again.
     """
-    ha_to_hub = HAToHubitat(hass, mock_entry, maker_client, web_client, entity_map)
+    ha_to_hub = HAToHubitat(hass, mock_entry, web_client, entity_map)
 
     er_entry = MagicMock()
     er_entry.entity_category = None
@@ -114,19 +108,19 @@ async def test_state_change_creates_virtual_device_and_syncs(hass, maker_client,
         # First event: creates device, skips sync
         await ha_to_hub._handle_state_changed("switch.my_switch", state)
         web_client.async_create_virtual_device.assert_called_once_with("My Switch", "Virtual Switch")
-        maker_client.send_command.assert_not_called()
+        web_client.async_send_command.assert_not_called()
         assert entity_map.get("switch.my_switch") == "99"
 
-        # Second event: syncs without creating again
+        # Second event: syncs via web client without creating again
         await ha_to_hub._handle_state_changed("switch.my_switch", state)
         web_client.async_create_virtual_device.assert_called_once()  # still just once
-        maker_client.send_command.assert_called_once_with("99", "on")
+        web_client.async_send_command.assert_called_once_with("99", "on", None)
 
 
-async def test_state_change_syncs_existing_device(hass, maker_client, web_client, entity_map, mock_entry):
-    """On state_changed for an already-mapped entity, syncs command without creating a new device."""
+async def test_state_change_syncs_existing_device(hass, web_client, entity_map, mock_entry):
+    """On state_changed for an already-mapped entity, syncs via web client without creating."""
     entity_map.put("switch.existing", "42")
-    ha_to_hub = HAToHubitat(hass, mock_entry, maker_client, web_client, entity_map)
+    ha_to_hub = HAToHubitat(hass, mock_entry, web_client, entity_map)
 
     state = MagicMock()
     state.state = "off"
@@ -136,4 +130,4 @@ async def test_state_change_syncs_existing_device(hass, maker_client, web_client
     await ha_to_hub._sync_state("switch.existing", state)
 
     web_client.async_create_virtual_device.assert_not_called()
-    maker_client.send_command.assert_called_once_with("42", "off")
+    web_client.async_send_command.assert_called_once_with("42", "off", None)

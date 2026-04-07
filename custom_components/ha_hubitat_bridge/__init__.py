@@ -34,7 +34,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await entity_map.async_load()
 
     coordinator = HubitatCoordinator(hass, entry, maker_client)
-    ha_to_hubitat = HAToHubitat(hass, entry, maker_client, web_client, entity_map)
+    ha_to_hubitat = HAToHubitat(hass, entry, web_client, entity_map)
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
         "coordinator": coordinator,

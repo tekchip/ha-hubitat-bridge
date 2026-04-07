@@ -17,7 +17,7 @@ from .const import (
     MIRROR_DOMAINS,
 )
 from .entity_map import EntityMap
-from .hubitat_client import HubitatMakerClient, HubitatWebClient
+from .hubitat_client import HubitatWebClient
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -121,13 +121,11 @@ class HAToHubitat:
         self,
         hass: HomeAssistant,
         entry: ConfigEntry,
-        maker_client: HubitatMakerClient,
         web_client: HubitatWebClient,
         entity_map: EntityMap,
     ) -> None:
         self.hass = hass
         self._entry = entry
-        self._maker_client = maker_client
         self._web_client = web_client
         self._entity_map = entity_map
         self._unsub = None
@@ -193,17 +191,6 @@ class HAToHubitat:
             return
 
         command, value = cmd
-        try:
-            if value is not None:
-                await self._maker_client.send_command(device_id, command, value)
-            else:
-                await self._maker_client.send_command(device_id, command)
-        except Exception as exc:
-            _LOGGER.error("Failed to sync %s → Hubitat device %s: %s", entity_id, device_id, exc)
-            from homeassistant.components.persistent_notification import async_create as pn_create
-            pn_create(
-                self.hass,
-                f"Hubitat Bridge: Failed to sync **{entity_id}** to Hubitat. Error: {exc}",
-                title="Hubitat Bridge Error",
-                notification_id=f"hab_sync_fail_{entity_id}",
-            )
+        ok = await self._web_client.async_send_command(device_id, command, value)
+        if not ok:
+            _LOGGER.error("Failed to sync %s → Hubitat device %s (%s)", entity_id, device_id, command)

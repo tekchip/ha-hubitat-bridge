@@ -215,3 +215,43 @@ class HubitatWebClient:
             _LOGGER.warning("Created device %s but failed to set label '%s': %s", device_id, name, exc)
 
         return str(device_id)
+
+    async def async_send_command(
+        self, device_id: str, command: str, value: str | None = None
+    ) -> bool:
+        """
+        Send a command to a Hubitat device via POST /device/runmethod.
+
+        This bypasses the Maker API (which only knows about a static device list)
+        and works for virtual devices we create after the Maker API was configured.
+
+        Returns True if Hubitat accepted the command (HTTP 200), False otherwise.
+        """
+        if not self._authenticated:
+            if not await self.async_login():
+                _LOGGER.error("Login failed — cannot send command to device %s", device_id)
+                return False
+
+        data: dict[str, str] = {"id": device_id, "method": command}
+        if value is not None:
+            data["argType.1"] = "NUMBER"
+            data["arg[1]"] = value
+
+        try:
+            async with self._get_session().post(
+                f"{self._hub_url}/device/runmethod",
+                data=data,
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                allow_redirects=False,
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as resp:
+                if resp.status in (301, 302, 303, 307, 308):
+                    location = resp.headers.get("Location", "")
+                    if "login" in location:
+                        _LOGGER.warning("Session expired sending command to device %s", device_id)
+                        self._authenticated = False
+                        return False
+                return resp.status == 200 or resp.status in (301, 302, 303, 307, 308)
+        except Exception as exc:
+            _LOGGER.error("Failed to send command %s to device %s: %s", command, device_id, exc)
+            return False
