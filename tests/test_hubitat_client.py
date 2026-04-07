@@ -105,3 +105,29 @@ async def test_create_virtual_device_returns_none_on_error(web_client):
         m.post("http://10.10.10.7/device/update", status=500)
         device_id = await web_client.async_create_virtual_device("Bad", "Virtual Switch")
     assert device_id is None
+
+
+async def test_login_failure_redirects_to_login(web_client):
+    """302 back to /login means wrong password."""
+    with aioresponses() as m:
+        m.post(
+            "http://10.10.10.7/login",
+            status=302,
+            headers={"Location": "http://10.10.10.7/login"},
+        )
+        result = await web_client.async_login()
+    assert result is False
+
+
+async def test_create_virtual_device_returns_none_on_session_expiry(web_client):
+    """If POST redirects back to /login, session expired — return None and reset auth."""
+    web_client._authenticated = True
+    with aioresponses() as m:
+        m.post(
+            "http://10.10.10.7/device/update",
+            status=302,
+            headers={"Location": "http://10.10.10.7/login"},
+        )
+        device_id = await web_client.async_create_virtual_device("Test", "Virtual Switch")
+    assert device_id is None
+    assert web_client._authenticated is False

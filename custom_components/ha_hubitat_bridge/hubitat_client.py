@@ -102,7 +102,7 @@ class HubitatWebClient:
                 # Successful login: Hubitat issues a 302 redirect away from /login
                 if resp.status in (301, 302, 303, 307, 308):
                     location = resp.headers.get("Location", "")
-                    self._authenticated = not location.rstrip("/").endswith("/login")
+                    self._authenticated = bool(location) and not location.rstrip("/").endswith("/login")
                 else:
                     self._authenticated = False
                 return self._authenticated
@@ -138,14 +138,16 @@ class HubitatWebClient:
                 # Hubitat redirects to /device/edit/{id} on success
                 if resp.status in (301, 302, 303, 307, 308):
                     location = resp.headers.get("Location", "")
+                    if location.rstrip("/").endswith("/login"):
+                        self._authenticated = False  # session expired
+                        return None
                     if "/device/edit/" in location:
                         return location.split("/device/edit/")[-1].split("?")[0].strip()
-                    return None
-                resp.raise_for_status()
-                # Fallback: scan response body for redirect hint
-                body = await resp.text()
-                match = re.search(r"/device/edit/(\d+)", body)
-                return match.group(1) if match else None
+                    # Fallback: scan response body for redirect hint
+                    body = await resp.text()
+                    match = re.search(r"/device/edit/(\d+)", body)
+                    return match.group(1) if match else None
+                return None  # non-redirect, non-error response with no usable ID
         except Exception as exc:
             _LOGGER.error("Failed to create virtual device '%s' (%s): %s", name, driver, exc)
             return None
