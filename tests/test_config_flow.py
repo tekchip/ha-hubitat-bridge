@@ -172,9 +172,12 @@ async def test_options_flow_no_icon(hass: HomeAssistant):
     assert result2["type"] == FlowResultType.FORM
     assert result2["step_id"] == "init"
 
-    result3 = await hass.config_entries.options.async_configure(
-        result2["flow_id"], user_input={"icon_url": ""}
-    )
+    with patch(
+        "custom_components.ha_hubitat_bridge.config_flow.HubitatBridgeOptionsFlow._restore_default_icon"
+    ):
+        result3 = await hass.config_entries.options.async_configure(
+            result2["flow_id"], user_input={"icon_url": ""}
+        )
     assert result3["type"] == FlowResultType.CREATE_ENTRY
 
 

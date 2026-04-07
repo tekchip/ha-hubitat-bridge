@@ -119,6 +119,8 @@ class HubitatBridgeOptionsFlow(config_entries.OptionsFlow):
             if icon_url:
                 if not await self._download_icon(icon_url):
                     errors[CONF_ICON_URL] = "icon_download_failed"
+            else:
+                self._restore_default_icon()
             if not errors:
                 return self.async_create_entry(data=user_input)
 
@@ -161,3 +163,16 @@ class HubitatBridgeOptionsFlow(config_entries.OptionsFlow):
             return False
 
         return True
+
+    def _restore_default_icon(self) -> None:
+        """Restore icon.png from the committed default (icon_default.png)."""
+        integration_dir = Path(self.hass.config.config_dir) / "custom_components" / DOMAIN
+        default = integration_dir / "icon_default.png"
+        icon = integration_dir / "icon.png"
+        if default.exists():
+            try:
+                import shutil
+                shutil.copy2(default, icon)
+                _LOGGER.info("Default icon restored — restart HA to apply")
+            except OSError as exc:
+                _LOGGER.error("Could not restore default icon: %s", exc)

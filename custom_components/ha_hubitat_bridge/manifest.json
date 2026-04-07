@@ -1,7 +1,7 @@
 {
   "domain": "ha_hubitat_bridge",
   "name": "Hubitat Bridge",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "config_flow": true,
   "documentation": "https://github.com/tekchip/ha-hubitat-bridge",
   "issue_tracker": "https://github.com/tekchip/ha-hubitat-bridge/issues",
