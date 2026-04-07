@@ -118,7 +118,9 @@ class HubitatWebClient:
         POST /device/update → Hubitat redirects to /device/edit/{id}.
         """
         if not self._authenticated:
+            _LOGGER.debug("Not authenticated; logging in before creating virtual device")
             if not await self.async_login():
+                _LOGGER.error("Login failed — cannot create virtual device '%s'", name)
                 return None
 
         url = f"{self._hub_url}/device/update"
@@ -131,23 +133,42 @@ class HubitatWebClient:
             "hub": "1",
             "deviceNetworkId": network_id,
         }
+        _LOGGER.debug("POST %s with driver=%s name=%s", url, driver, name)
         try:
             async with self._session.post(
                 url, data=data, allow_redirects=False, timeout=aiohttp.ClientTimeout(total=15)
             ) as resp:
+                location = resp.headers.get("Location", "")
+                _LOGGER.debug(
+                    "Create virtual device response: status=%s Location=%r", resp.status, location
+                )
                 # Hubitat redirects to /device/edit/{id} on success
                 if resp.status in (301, 302, 303, 307, 308):
-                    location = resp.headers.get("Location", "")
                     if location.rstrip("/").endswith("/login"):
+                        _LOGGER.warning(
+                            "Session expired creating virtual device '%s'; Location=%s", name, location
+                        )
                         self._authenticated = False  # session expired
                         return None
                     if "/device/edit/" in location:
                         return location.split("/device/edit/")[-1].split("?")[0].strip()
                     # Fallback: scan response body for redirect hint
                     body = await resp.text()
+                    _LOGGER.debug("Redirect body snippet: %.500s", body)
                     match = re.search(r"/device/edit/(\d+)", body)
-                    return match.group(1) if match else None
-                return None  # non-redirect, non-error response with no usable ID
+                    if match:
+                        return match.group(1)
+                    _LOGGER.error(
+                        "Create virtual device '%s': redirect Location=%r has no /device/edit/ path", name, location
+                    )
+                    return None
+                # Non-redirect: log body snippet to help diagnose
+                body = await resp.text()
+                _LOGGER.error(
+                    "Create virtual device '%s': unexpected status=%s body=%.500s",
+                    name, resp.status, body,
+                )
+                return None
         except Exception as exc:
             _LOGGER.error("Failed to create virtual device '%s' (%s): %s", name, driver, exc)
             return None
