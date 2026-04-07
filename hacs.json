@@ -1,0 +1,6 @@
+{
+  "name": "Hubitat Bridge",
+  "description": "Bidirectional device mirroring between Home Assistant and Hubitat Elevation",
+  "content_in_root": false,
+  "homeassistant": "2024.1.0"
+}

@@ -1,0 +1,25 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to Hubitat",
+        "description": "Enter your Hubitat Elevation hub details. The Maker API app must be set to expose **All Devices**.",
+        "data": {
+          "hub_url": "Hub URL",
+          "app_id": "Maker API App ID",
+          "token": "Maker API Access Token",
+          "username": "Hub Username",
+          "password": "Hub Password"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Unable to reach the hub. Check the Hub URL.",
+      "invalid_auth": "Invalid credentials. Check token, username, and password.",
+      "unknown": "Unexpected error. See logs for details."
+    },
+    "abort": {
+      "already_configured": "Hubitat Bridge is already configured."
+    }
+  }
+}
