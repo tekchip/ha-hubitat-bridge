@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING
 
@@ -129,6 +130,7 @@ class HAToHubitat:
         self._web_client = web_client
         self._entity_map = entity_map
         self._unsub = None
+        self._creation_in_progress: set[str] = set()  # entity_ids currently being created
 
     async def async_setup(self) -> None:
         self._unsub = self.hass.bus.async_listen(EVENT_STATE_CHANGED, self._on_state_changed)
@@ -154,9 +156,11 @@ class HAToHubitat:
             return
 
         if not self._entity_map.has(entity_id):
+            if entity_id in self._creation_in_progress:
+                return  # another task is already creating this device
             await self._create_virtual_device(entity_id, state)
-            # Skip sync on first creation — the Maker API needs a moment to register
-            # the new virtual device. The next state change will trigger the sync.
+            # Skip sync on first creation — give the device time to initialize.
+            # The next state change will trigger the sync.
             return
 
         await self._sync_state(entity_id, state)
@@ -166,7 +170,12 @@ class HAToHubitat:
         driver = _driver_for(entity_id, state)
         _LOGGER.info("Creating Hubitat virtual device '%s' (%s) for %s", friendly_name, driver, entity_id)
 
-        device_id = await self._web_client.async_create_virtual_device(friendly_name, driver)
+        self._creation_in_progress.add(entity_id)
+        try:
+            device_id = await self._create_with_retry(friendly_name, driver)
+        finally:
+            self._creation_in_progress.discard(entity_id)
+
         if device_id is None:
             from homeassistant.components.persistent_notification import async_create as pn_create
             pn_create(
@@ -180,6 +189,27 @@ class HAToHubitat:
 
         self._entity_map.put(entity_id, device_id)
         await self._entity_map.async_save()
+
+    async def _create_with_retry(self, friendly_name: str, driver: str) -> str | None:
+        """Attempt virtual device creation up to 3 times with backoff.
+
+        Returns the device ID on success, or None after all attempts fail.
+        Only logs a warning (not an error) on intermediate failures so a
+        transient startup hiccup doesn't immediately surface as a user error.
+        """
+        delays = (0, 15, 60)  # seconds before attempt 1, 2, 3
+        for attempt, delay in enumerate(delays, start=1):
+            if delay:
+                await asyncio.sleep(delay)
+            device_id = await self._web_client.async_create_virtual_device(friendly_name, driver)
+            if device_id is not None:
+                return device_id
+            if attempt < len(delays):
+                _LOGGER.warning(
+                    "Virtual device creation failed for '%s' (attempt %d/%d, retrying in %ds)",
+                    friendly_name, attempt, len(delays), delays[attempt],
+                )
+        return None
 
     async def _sync_state(self, entity_id: str, state: State) -> None:
         device_id = self._entity_map.get(entity_id)
