@@ -33,6 +33,7 @@ async def async_setup_entry(
 class HubitatLock(HubitatEntity, LockEntity):
     def __init__(self, device: dict, coordinator: HubitatCoordinator) -> None:
         super().__init__(device, coordinator)
+        self._attr_unique_id = f"hubitat_{self._device_id}_lock"
         self._attr_is_locked = self._get_attr("lock") == "locked"
 
     def handle_event(self, attribute: str, value: str) -> None:

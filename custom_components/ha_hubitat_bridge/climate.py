@@ -54,6 +54,7 @@ class HubitatClimate(HubitatEntity, ClimateEntity):
 
     def __init__(self, device: dict, coordinator: HubitatCoordinator) -> None:
         super().__init__(device, coordinator)
+        self._attr_unique_id = f"hubitat_{self._device_id}_climate"
         raw_mode = self._get_attr("thermostatMode") or "off"
         self._attr_hvac_mode = _HUBITAT_TO_HA_MODE.get(raw_mode, HVACMode.OFF)
         temp = self._get_attr("temperature")
@@ -87,7 +88,11 @@ class HubitatClimate(HubitatEntity, ClimateEntity):
         high = kwargs.get(ATTR_TARGET_TEMP_HIGH)
         low = kwargs.get(ATTR_TARGET_TEMP_LOW)
         if temp is not None:
-            await self._coordinator.maker_client.send_command(self._device_id, "setCoolingSetpoint", str(temp))
+            if self._attr_hvac_mode == HVACMode.HEAT:
+                await self._coordinator.maker_client.send_command(self._device_id, "setHeatingSetpoint", str(temp))
+                self._attr_target_temperature_low = temp
+            else:
+                await self._coordinator.maker_client.send_command(self._device_id, "setCoolingSetpoint", str(temp))
             self._attr_target_temperature = temp
         if high is not None:
             await self._coordinator.maker_client.send_command(self._device_id, "setCoolingSetpoint", str(high))

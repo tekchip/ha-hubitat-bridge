@@ -35,6 +35,7 @@ class HubitatCover(HubitatEntity, CoverEntity):
 
     def __init__(self, device: dict, coordinator: HubitatCoordinator) -> None:
         super().__init__(device, coordinator)
+        self._attr_unique_id = f"hubitat_{self._device_id}_cover"
         self._attr_is_closed = self._get_attr("door") == "closed"
 
     def handle_event(self, attribute: str, value: str) -> None:

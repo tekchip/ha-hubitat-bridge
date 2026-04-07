@@ -38,12 +38,14 @@ class HubitatFan(HubitatEntity, FanEntity):
 
     def __init__(self, device: dict, coordinator: HubitatCoordinator) -> None:
         super().__init__(device, coordinator)
+        self._attr_unique_id = f"hubitat_{self._device_id}_fan"
         self._attr_is_on = self._get_attr("switch") == "on"
         speed = self._get_attr("speed")
         self._attr_percentage = _SPEED_TO_PCT.get(speed, 0) if speed else 0
 
     def handle_event(self, attribute: str, value: str) -> None:
         if attribute == "switch":
+            self._attr_is_on = value == "on"
             if value == "on":
                 # If turning on, restore to non-zero percentage or default to medium
                 if self._attr_percentage == 0:
@@ -60,6 +62,7 @@ class HubitatFan(HubitatEntity, FanEntity):
             await self.async_set_percentage(percentage)
         else:
             await self._coordinator.maker_client.send_command(self._device_id, "on")
+            self._attr_is_on = True
             # Set to medium speed if turning on without a specific percentage
             if self._attr_percentage == 0:
                 self._attr_percentage = _SPEED_TO_PCT["medium"]
