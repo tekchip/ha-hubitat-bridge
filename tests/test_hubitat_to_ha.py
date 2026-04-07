@@ -97,3 +97,26 @@ async def test_new_device_on_poll_sends_signal(hass: HomeAssistant, mock_maker_c
     await coordinator._async_poll(None)
     await hass.async_block_till_done()
     assert any(d["id"] == "3" for d in signals)
+
+
+async def test_integration_loads(hass: HomeAssistant, mock_maker_client, mock_entry):
+    """Integration async_setup_entry wires coordinator and does not raise."""
+    from custom_components.ha_hubitat_bridge import async_setup_entry
+
+    with (
+        patch("custom_components.ha_hubitat_bridge.HubitatMakerClient", return_value=mock_maker_client),
+        patch("custom_components.ha_hubitat_bridge.HubitatWebClient"),
+        patch("custom_components.ha_hubitat_bridge.HubitatCoordinator.async_setup", new_callable=AsyncMock),
+        patch("custom_components.ha_hubitat_bridge.HAToHubitat.async_setup", new_callable=AsyncMock),
+        patch("custom_components.ha_hubitat_bridge.EntityMap.async_load", new_callable=AsyncMock),
+        patch("homeassistant.config_entries.ConfigEntries.async_forward_entry_setups", new_callable=AsyncMock),
+    ):
+        mock_entry.data = {
+            "hub_url": "http://10.10.10.7",
+            "app_id": 150,
+            "token": "tok",
+            "username": "u",
+            "password": "p",
+        }
+        result = await async_setup_entry(hass, mock_entry)
+    assert result is True
